@@ -39,6 +39,11 @@ func TestMultiCall(t *testing.T) {
 		t.Fatalf("Do failed:%v", err)
 	}
 
+	for _, addr := range output {
+		if addr == (common.Address{}) {
+			t.Fatalf("pair address wrong")
+		}
+	}
 	if height == 0 {
 		t.Fatalf("height wrong:%d", height)
 	}
