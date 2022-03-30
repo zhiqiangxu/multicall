@@ -21,7 +21,7 @@ contract MultiCall {
         }
         bytes memory result = abi.encode(block.number, returnDatas);
         assembly {
-            return(add(result, 32), result)
+            return(add(result, 32), mload(result))
         }
     }
 }
