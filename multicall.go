@@ -170,6 +170,42 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 	return
 }
 
+func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T)) (height uint64, err error) {
+	if total <= 0 {
+		return
+	}
+	if unit <= 0 {
+		panic("unit <= 0")
+	}
+	height = uint64(math.MaxUint64)
+
+	buffer := make([]T, unit)
+	for from := 0; from < total; from += unit {
+		to := from + unit
+		if to > total {
+			to = total
+		}
+		invokes := make([]Invoke, 0, to-from)
+		for k := from; k < to; k++ {
+			invokes = append(invokes, invokeFunc(k)...)
+		}
+		if len(invokes) > len(buffer) {
+			buffer = make([]T, len(invokes))
+		}
+		var unitHeight uint64
+		unitHeight, err = Do(ctx, client, ab, invokes, buffer[0:len(invokes)])
+		if err != nil {
+			return
+		}
+		if height == math.MaxUint64 {
+			height = unitHeight
+		}
+
+		cvtFunc(from, to, buffer[0:len(invokes)])
+	}
+	return
+}
+
 func InterfaceSlice(slice interface{}) []interface{} {
 	s := reflect.ValueOf(slice)
 	if s.Kind() != reflect.Slice {
