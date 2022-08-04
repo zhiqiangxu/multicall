@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"math/big"
 	"reflect"
 	"strings"
@@ -117,7 +118,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 			invokeAB = ab
 		}
 
-		method, _ := invokeAB.Methods[invoke.Name]
+		method := invokeAB.Methods[invoke.Name]
 		var returnValue []interface{}
 		returnValue, err = method.Outputs.Unpack(returnData)
 		if err != nil {
@@ -131,6 +132,41 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 	}
 
 	height = output.Height.Uint64()
+	return
+}
+
+func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, result interface{}) (height uint64, err error) {
+	if total <= 0 {
+		return
+	}
+	if unit <= 0 {
+		panic("unit <= 0")
+	}
+	s := reflect.ValueOf(result)
+	if total != s.Len() {
+		err = fmt.Errorf("total != #results")
+		return
+	}
+
+	height = uint64(math.MaxUint64)
+	for from := 0; from < total; from += unit {
+		to := from + unit
+		if to > total {
+			to = total
+		}
+		invokes := make([]Invoke, 0, to-from)
+		for k := from; k < to; k++ {
+			invokes = append(invokes, invokeFunc(k)...)
+		}
+		var unitHeight uint64
+		unitHeight, err = Do(ctx, client, ab, invokes, s.Slice(from, to).Interface())
+		if err != nil {
+			return
+		}
+		if height == math.MaxUint64 {
+			height = unitHeight
+		}
+	}
 	return
 }
 
