@@ -170,7 +170,7 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 	return
 }
 
-func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T)) (height uint64, err error) {
+func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -201,7 +201,10 @@ func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.AB
 			height = unitHeight
 		}
 
-		cvtFunc(from, to, buffer[0:len(invokes)])
+		err = cvtFunc(from, to, buffer[0:len(invokes)])
+		if err != nil {
+			return
+		}
 	}
 	return
 }
