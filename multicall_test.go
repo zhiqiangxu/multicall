@@ -83,7 +83,7 @@ func TestDoSlice(t *testing.T) {
 			Name:     "allPairs",
 			Args:     []interface{}{big.NewInt(int64(i))},
 		}}
-	}, outputSlice)
+	}, nil, outputSlice)
 	if err != nil {
 		t.Fatalf("DoSlice failed:%v", err)
 	}

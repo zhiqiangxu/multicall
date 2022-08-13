@@ -135,7 +135,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 	return
 }
 
-func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, result interface{}) (height uint64, err error) {
+func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, beforeDo func(from, to int), result interface{}) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -143,26 +143,29 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 		panic("unit <= 0")
 	}
 	s := reflect.ValueOf(result)
-	if total != s.Len() {
-		err = fmt.Errorf("total != #results")
-		return
-	}
 
 	height = uint64(math.MaxUint64)
+	invokes := make([]Invoke, 0, unit)
+	nextFrom := 0
 	for from := 0; from < total; from += unit {
 		to := from + unit
 		if to > total {
 			to = total
 		}
-		invokes := make([]Invoke, 0, to-from)
+		invokes = invokes[:0]
 		for k := from; k < to; k++ {
 			invokes = append(invokes, invokeFunc(k)...)
 		}
 		var unitHeight uint64
-		unitHeight, err = Do(ctx, client, ab, invokes, s.Slice(from, to).Interface())
+		if beforeDo != nil {
+			beforeDo(from, to)
+		}
+		unitHeight, err = Do(ctx, client, ab, invokes, s.Slice(nextFrom, nextFrom+len(invokes)).Interface())
 		if err != nil {
 			return
 		}
+		nextFrom += len(invokes)
+
 		if height == math.MaxUint64 {
 			height = unitHeight
 		}
@@ -170,7 +173,7 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 	return
 }
 
-func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error) (height uint64, err error) {
+func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error, beforeDo func(from, to int)) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -180,12 +183,13 @@ func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.AB
 	height = uint64(math.MaxUint64)
 
 	buffer := make([]T, unit)
+	invokes := make([]Invoke, 0, unit)
 	for from := 0; from < total; from += unit {
 		to := from + unit
 		if to > total {
 			to = total
 		}
-		invokes := make([]Invoke, 0, to-from)
+		invokes = invokes[:0]
 		for k := from; k < to; k++ {
 			invokes = append(invokes, invokeFunc(k)...)
 		}
@@ -193,6 +197,9 @@ func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.AB
 			buffer = make([]T, len(invokes))
 		}
 		var unitHeight uint64
+		if beforeDo != nil {
+			beforeDo(from, to)
+		}
 		unitHeight, err = Do(ctx, client, ab, invokes, buffer[0:len(invokes)])
 		if err != nil {
 			return
