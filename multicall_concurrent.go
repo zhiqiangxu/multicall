@@ -26,6 +26,7 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
 
+	nextFrom := 0
 	for from := 0; from < total; from += concurrentUnit {
 		to := from + concurrentUnit
 		if to > total {
@@ -40,15 +41,16 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 			invokes = append(invokes, invokeFunc(k)...)
 		}
 
-		for i := 0; i*unit < len(invokes); i++ {
-			to := (i + 1) * unit
+		invokeUnit := len(invokes)/len(clients) + 1
+		for i := 0; i*invokeUnit < len(invokes); i++ {
+			to := (i + 1) * invokeUnit
 			if to > len(invokes) {
 				to = len(invokes)
 			}
-			subInvokes := invokes[i*unit : to]
+			subInvokes := invokes[i*invokeUnit : to]
 			client := clients[i]
-			sliceFrom := from + i*unit
-			sliceTo := from + to
+			sliceFrom := nextFrom + i*invokeUnit
+			sliceTo := nextFrom + to
 			util.GoFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, s.Slice(sliceFrom, sliceTo).Interface())
 				if err != nil {
@@ -65,6 +67,7 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 			})
 		}
 		wg.Wait()
+		nextFrom += len(invokes)
 
 		select {
 		case err = <-errCh:
@@ -93,8 +96,8 @@ func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Clien
 	errCh := make(chan error, 1)
 	var wg sync.WaitGroup
 
-	for from := 0; from < total; from += unit {
-		to := from + unit
+	for from := 0; from < total; from += concurrentUnit {
+		to := from + concurrentUnit
 		if to > total {
 			to = total
 		}
@@ -112,14 +115,15 @@ func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Clien
 		}
 		buffer = buffer[0:len(invokes)]
 
-		for i := 0; i*unit < len(invokes); i++ {
-			to := (i + 1) * unit
+		invokeUnit := len(invokes)/len(clients) + 1
+		for i := 0; i*invokeUnit < len(invokes); i++ {
+			to := (i + 1) * invokeUnit
 			if to > len(invokes) {
 				to = len(invokes)
 			}
-			subInvokes := invokes[i*unit : to]
+			subInvokes := invokes[i*invokeUnit : to]
 			client := clients[i]
-			sliceFrom := i * unit
+			sliceFrom := i * invokeUnit
 			sliceTo := to
 			util.GoFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, buffer[sliceFrom:sliceTo])

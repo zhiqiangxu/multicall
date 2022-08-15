@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -41,6 +42,9 @@ func init() {
 	}
 	parsedAbi, _ = abi.JSON(strings.NewReader(mcabi.MultiCallABI))
 }
+
+var Retry = 3
+var BackoffInterval = time.Second * 2
 
 func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}) (height uint64, err error) {
 
@@ -80,7 +84,15 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 		return
 	}
 
-	resultBytes, err := client.CallContract(ctx, ethereum.CallMsg{Data: append(common.FromHex(mcabi.MultiCallBin), packed...)}, nil)
+	var resultBytes []byte
+	for i := 0; i < Retry; i++ {
+		resultBytes, err = client.CallContract(ctx, ethereum.CallMsg{Data: append(common.FromHex(mcabi.MultiCallBin), packed...)}, nil)
+		if err != nil {
+			time.Sleep(BackoffInterval)
+			continue
+		}
+		break
+	}
 	if err != nil {
 		return
 	}
