@@ -3,7 +3,7 @@ pragma solidity >=0.5.15;
 pragma experimental ABIEncoderV2;
 
 contract MultiCall {
-    constructor(address[] memory targets, bytes[] memory datas) public {
+    constructor(address[] memory targets, bytes[] memory datas)  {
         uint256 len = targets.length;
         require(datas.length == len, "Error: Array lengths do not match.");
 
@@ -13,11 +13,8 @@ contract MultiCall {
             address target = targets[i];
             bytes memory data = datas[i];
             (bool success, bytes memory returnData) = target.call(data);
-            if (!success) {
-                returnDatas[i] = bytes("");
-            } else {
-                returnDatas[i] = returnData;
-            }
+            require(success, "Error: call failed.");
+            returnDatas[i] = returnData;
         }
         bytes memory result = abi.encode(block.number, returnDatas);
         assembly {

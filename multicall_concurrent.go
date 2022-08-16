@@ -10,7 +10,15 @@ import (
 	"github.com/zhiqiangxu/util"
 )
 
-func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, beforeDo func(from, to int), result interface{}) (height uint64, err error) {
+func DoSliceConcurrent(
+	ctx context.Context,
+	clients []*ethclient.Client,
+	ab *abi.ABI,
+	total, unit int,
+	invokeFunc func(i int) []Invoke,
+	beforeDo func(from, to int),
+	onErr func(subInvokes []Invoke, err error, client *ethclient.Client),
+	result interface{}) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -54,6 +62,10 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 			util.GoFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, s.Slice(sliceFrom, sliceTo).Interface())
 				if err != nil {
+					if onErr != nil {
+						onErr(subInvokes, err, client)
+					}
+
 					select {
 					case errCh <- err:
 					default:
@@ -69,6 +81,9 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 		wg.Wait()
 		nextFrom += len(invokes)
 
+		if onErr != nil {
+			continue
+		}
 		select {
 		case err = <-errCh:
 			return
@@ -76,11 +91,26 @@ func DoSliceConcurrent(ctx context.Context, clients []*ethclient.Client, ab *abi
 		}
 	}
 
+	if onErr != nil {
+		select {
+		case err = <-errCh:
+			return
+		default:
+		}
+	}
 	height = <-heightCh
 	return
 }
 
-func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error, beforeDo func(from, to int)) (height uint64, err error) {
+func DoSliceCvtConcurrent[T any](
+	ctx context.Context,
+	clients []*ethclient.Client,
+	ab *abi.ABI,
+	total, unit int,
+	invokeFunc func(i int) []Invoke,
+	cvtFunc func(from, to int, result []T) error,
+	beforeDo func(from, to int),
+	onErr func(subInvokes []Invoke, err error, client *ethclient.Client)) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -128,6 +158,9 @@ func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Clien
 			util.GoFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, buffer[sliceFrom:sliceTo])
 				if err != nil {
+					if onErr != nil {
+						onErr(subInvokes, err, client)
+					}
 					select {
 					case errCh <- err:
 					default:
@@ -147,6 +180,10 @@ func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Clien
 			return
 		}
 
+		if onErr != nil {
+			continue
+		}
+
 		select {
 		case err = <-errCh:
 			return
@@ -154,6 +191,13 @@ func DoSliceCvtConcurrent[T any](ctx context.Context, clients []*ethclient.Clien
 		}
 	}
 
+	if onErr != nil {
+		select {
+		case err = <-errCh:
+			return
+		default:
+		}
+	}
 	height = <-heightCh
 	return
 }
