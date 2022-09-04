@@ -28,6 +28,7 @@ var (
 	uint256Type    abi.Type
 	bytesSliceType abi.Type
 	parsedAbi      abi.ABI
+	arguments      abi.Arguments
 )
 
 func init() {
@@ -40,6 +41,11 @@ func init() {
 	if err != nil {
 		log.Fatalf("bytesSliceType failed:%v", err)
 	}
+	arguments = abi.Arguments{
+		{Type: uint256Type, Name: "Height"},
+		{Type: bytesSliceType, Name: "ReturnDatas"},
+	}
+
 	parsedAbi, _ = abi.JSON(strings.NewReader(mcabi.MultiCallABI))
 }
 
@@ -95,11 +101,6 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 	}
 	if err != nil {
 		return
-	}
-
-	arguments := abi.Arguments{
-		{Type: uint256Type, Name: "Height"},
-		{Type: bytesSliceType, Name: "ReturnDatas"},
 	}
 
 	var output struct {
