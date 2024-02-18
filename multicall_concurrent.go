@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/zhiqiangxu/util"
 )
@@ -18,7 +19,8 @@ func DoSliceConcurrent(
 	invokeFunc func(i int) []Invoke,
 	beforeDo func(from, to int),
 	onErr func(subInvokes []Invoke, err error, client *ethclient.Client),
-	result interface{}) (height uint64, err error) {
+	result interface{},
+	fromAddr ...common.Address) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -60,7 +62,7 @@ func DoSliceConcurrent(
 			sliceFrom := nextFrom + i*invokeUnit
 			sliceTo := nextFrom + to
 			util.GoFunc(&wg, func() {
-				unitHeight, err := Do(ctx, client, ab, subInvokes, s.Slice(sliceFrom, sliceTo).Interface())
+				unitHeight, err := Do(ctx, client, ab, subInvokes, s.Slice(sliceFrom, sliceTo).Interface(), fromAddr...)
 				if err != nil {
 					if onErr != nil {
 						onErr(subInvokes, err, client)
@@ -110,7 +112,8 @@ func DoSliceCvtConcurrent[T any](
 	invokeFunc func(i int) []Invoke,
 	cvtFunc func(from, to int, result []T) error,
 	beforeDo func(from, to int),
-	onErr func(subInvokes []Invoke, err error, client *ethclient.Client)) (height uint64, err error) {
+	onErr func(subInvokes []Invoke, err error, client *ethclient.Client),
+	fromAddr ...common.Address) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -156,7 +159,7 @@ func DoSliceCvtConcurrent[T any](
 			sliceFrom := i * invokeUnit
 			sliceTo := to
 			util.GoFunc(&wg, func() {
-				unitHeight, err := Do(ctx, client, ab, subInvokes, buffer[sliceFrom:sliceTo])
+				unitHeight, err := Do(ctx, client, ab, subInvokes, buffer[sliceFrom:sliceTo], fromAddr...)
 				if err != nil {
 					if onErr != nil {
 						onErr(subInvokes, err, client)
