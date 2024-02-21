@@ -118,6 +118,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 	}
 	resultInterface, err := arguments.Unpack(resultBytes)
 	if err != nil {
+		err = fmt.Errorf("arguments.Unpack failed:%v", err)
 		return
 	}
 	err = arguments.Copy(&output, resultInterface)

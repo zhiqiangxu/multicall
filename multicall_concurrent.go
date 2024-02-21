@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/zhiqiangxu/util"
 )
 
 func DoSliceConcurrent(
@@ -61,7 +60,7 @@ func DoSliceConcurrent(
 			client := clients[i]
 			sliceFrom := nextFrom + i*invokeUnit
 			sliceTo := nextFrom + to
-			util.GoFunc(&wg, func() {
+			goFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, s.Slice(sliceFrom, sliceTo).Interface(), fromAddr...)
 				if err != nil {
 					if onErr != nil {
@@ -158,7 +157,7 @@ func DoSliceCvtConcurrent[T any](
 			client := clients[i]
 			sliceFrom := i * invokeUnit
 			sliceTo := to
-			util.GoFunc(&wg, func() {
+			goFunc(&wg, func() {
 				unitHeight, err := Do(ctx, client, ab, subInvokes, buffer[sliceFrom:sliceTo], fromAddr...)
 				if err != nil {
 					if onErr != nil {
@@ -203,4 +202,13 @@ func DoSliceCvtConcurrent[T any](
 	}
 	height = <-heightCh
 	return
+}
+
+// goFunc runs a goroutine under WaitGroup
+func goFunc(routinesGroup *sync.WaitGroup, f func()) {
+	routinesGroup.Add(1)
+	go func() {
+		defer routinesGroup.Done()
+		f()
+	}()
 }
