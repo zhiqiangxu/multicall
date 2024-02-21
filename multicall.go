@@ -13,7 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	mcabi "github.com/zhiqiangxu/multicall/contracts/abi"
 )
 
@@ -51,6 +53,101 @@ func init() {
 
 var Retry = 3
 var BackoffInterval = time.Second * 2
+
+func DoFrom(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}, from common.Address) (err error) {
+	results := InterfaceSlice(result)
+	if len(invokes) != len(results) {
+		err = fmt.Errorf("#invokes != #results")
+		return
+	}
+
+	batchElements := make([]rpc.BatchElem, 0, len(invokes))
+	for _, invoke := range invokes {
+		invokeAB := invoke.AB
+		if invokeAB == nil {
+			invokeAB = ab
+		}
+		method, exist := invokeAB.Methods[invoke.Name]
+		if !exist {
+			err = fmt.Errorf("method '%s' not found", invoke.Name)
+			return
+		}
+
+		var arguments []byte
+		arguments, err = method.Inputs.Pack(invoke.Args...)
+		if err != nil {
+			return
+		}
+		to := invoke.Contract
+		callMsg := ethereum.CallMsg{From: from, To: &to, Data: append(method.ID, arguments...)}
+
+		var callResult hexutil.Bytes
+		batchElements = append(batchElements, rpc.BatchElem{Method: "eth_call", Args: []interface{}{toCallArg(callMsg), "latest"}, Result: &callResult})
+	}
+
+	err = client.Client().BatchCallContext(ctx, batchElements)
+	if err != nil {
+		err = fmt.Errorf("BatchCallContext failed:%v", err)
+		return
+	}
+
+	for i, batchElement := range batchElements {
+		if batchElement.Error != nil {
+			err = fmt.Errorf("batchElement.Error:%v", batchElement.Error)
+			return
+		}
+
+		invoke := invokes[i]
+		invokeAB := invoke.AB
+		if invokeAB == nil {
+			invokeAB = ab
+		}
+
+		method := invokeAB.Methods[invoke.Name]
+		var returnValue []interface{}
+		returnValue, err = method.Outputs.Unpack(*batchElement.Result.(*hexutil.Bytes))
+		if err != nil {
+			return
+		}
+
+		err = method.Outputs.Copy(results[i], returnValue)
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func toCallArg(msg ethereum.CallMsg) interface{} {
+	arg := map[string]interface{}{
+		"from": msg.From,
+		"to":   msg.To,
+	}
+	if len(msg.Data) > 0 {
+		arg["input"] = hexutil.Bytes(msg.Data)
+		arg["data"] = arg["input"] // for compatibility
+	}
+	if msg.Value != nil {
+		arg["value"] = (*hexutil.Big)(msg.Value)
+	}
+	if msg.Gas != 0 {
+		arg["gas"] = hexutil.Uint64(msg.Gas)
+	}
+	if msg.GasPrice != nil {
+		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
+	}
+	if msg.GasFeeCap != nil {
+		arg["maxFeePerGas"] = (*hexutil.Big)(msg.GasFeeCap)
+	}
+	if msg.GasTipCap != nil {
+		arg["maxPriorityFeePerGas"] = (*hexutil.Big)(msg.GasTipCap)
+	}
+	if msg.AccessList != nil {
+		arg["accessList"] = msg.AccessList
+	}
+	return arg
+}
 
 func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}) (height uint64, err error) {
 

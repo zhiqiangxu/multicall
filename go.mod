@@ -1,10 +1,8 @@
 module github.com/zhiqiangxu/multicall
 
-go 1.21.0
+go 1.21
 
-toolchain go1.22.0
-
-require github.com/ethereum/go-ethereum v1.10.22-0.20240220114248-bba3fa9af970
+require github.com/ethereum/go-ethereum v1.13.8
 
 require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
