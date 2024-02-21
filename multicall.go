@@ -52,16 +52,7 @@ func init() {
 var Retry = 3
 var BackoffInterval = time.Second * 2
 
-func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}, from ...common.Address) (height uint64, err error) {
-
-	var fromAddr common.Address
-	if len(from) > 0 {
-		if len(from) > 1 {
-			err = fmt.Errorf("more than one from specified")
-			return
-		}
-		fromAddr = from[0]
-	}
+func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}) (height uint64, err error) {
 
 	results := InterfaceSlice(result)
 	if len(invokes) != len(results) {
@@ -101,7 +92,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 
 	var resultBytes []byte
 	for i := 0; i < Retry; i++ {
-		resultBytes, err = client.CallContract(ctx, ethereum.CallMsg{From: fromAddr, Data: append(common.FromHex(mcabi.MultiCallBin), packed...)}, nil)
+		resultBytes, err = client.CallContract(ctx, ethereum.CallMsg{Data: append(common.FromHex(mcabi.MultiCallBin), packed...)}, nil)
 		if err != nil {
 			time.Sleep(BackoffInterval)
 			continue
@@ -158,7 +149,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 	return
 }
 
-func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, beforeDo func(from, to int), result interface{}, fromAddr ...common.Address) (height uint64, err error) {
+func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, beforeDo func(from, to int), result interface{}) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -183,7 +174,7 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 		if beforeDo != nil {
 			beforeDo(from, to)
 		}
-		unitHeight, err = Do(ctx, client, ab, invokes, s.Slice(nextFrom, nextFrom+len(invokes)).Interface(), fromAddr...)
+		unitHeight, err = Do(ctx, client, ab, invokes, s.Slice(nextFrom, nextFrom+len(invokes)).Interface())
 		if err != nil {
 			return
 		}
@@ -196,7 +187,7 @@ func DoSlice(ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, 
 	return
 }
 
-func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error, beforeDo func(from, to int), fromAddr ...common.Address) (height uint64, err error) {
+func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.ABI, total, unit int, invokeFunc func(i int) []Invoke, cvtFunc func(from, to int, result []T) error, beforeDo func(from, to int)) (height uint64, err error) {
 	if total <= 0 {
 		return
 	}
@@ -223,7 +214,7 @@ func DoSliceCvt[T any](ctx context.Context, client *ethclient.Client, ab *abi.AB
 		if beforeDo != nil {
 			beforeDo(from, to)
 		}
-		unitHeight, err = Do(ctx, client, ab, invokes, buffer[0:len(invokes)], fromAddr...)
+		unitHeight, err = Do(ctx, client, ab, invokes, buffer[0:len(invokes)])
 		if err != nil {
 			return
 		}
