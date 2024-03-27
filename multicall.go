@@ -54,6 +54,42 @@ func init() {
 var Retry = 3
 var BackoffInterval = time.Second * 2
 
+func ToCallMsg(ab *abi.ABI, from common.Address, to *common.Address, methodName string, args ...interface{}) (callMsg ethereum.CallMsg, err error) {
+	method, exist := ab.Methods[methodName]
+	if !exist {
+		err = fmt.Errorf("method '%s' not found", methodName)
+		return
+	}
+
+	var arguments []byte
+	arguments, err = method.Inputs.Pack(args...)
+	if err != nil {
+		return
+	}
+	callMsg = ethereum.CallMsg{From: from, To: to, Data: append(method.ID, arguments...)}
+
+	return
+}
+
+func UnpackResult(ab *abi.ABI, methodName string, resultBytes []byte, result interface{}) (err error) {
+	method, exist := ab.Methods[methodName]
+	if !exist {
+		err = fmt.Errorf("method '%s' not found", methodName)
+		return
+	}
+
+	resultValue, err := method.Outputs.Unpack(resultBytes)
+	if err != nil {
+		return
+	}
+
+	err = method.Outputs.Copy(result, resultValue)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func DoFrom(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []Invoke, result interface{}, from common.Address) (err error) {
 	results := InterfaceSlice(result)
 	if len(invokes) != len(results) {
@@ -67,19 +103,13 @@ func DoFrom(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes 
 		if invokeAB == nil {
 			invokeAB = ab
 		}
-		method, exist := invokeAB.Methods[invoke.Name]
-		if !exist {
-			err = fmt.Errorf("method '%s' not found", invoke.Name)
-			return
-		}
 
-		var arguments []byte
-		arguments, err = method.Inputs.Pack(invoke.Args...)
+		to := invoke.Contract
+		var callMsg ethereum.CallMsg
+		callMsg, err = ToCallMsg(invokeAB, from, &to, invoke.Name, invoke.Args...)
 		if err != nil {
 			return
 		}
-		to := invoke.Contract
-		callMsg := ethereum.CallMsg{From: from, To: &to, Data: append(method.ID, arguments...)}
 
 		var callResult hexutil.Bytes
 		batchElements = append(batchElements, rpc.BatchElem{Method: "eth_call", Args: []interface{}{toCallArg(callMsg), "latest"}, Result: &callResult})
@@ -103,14 +133,7 @@ func DoFrom(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes 
 			invokeAB = ab
 		}
 
-		method := invokeAB.Methods[invoke.Name]
-		var returnValue []interface{}
-		returnValue, err = method.Outputs.Unpack(*batchElement.Result.(*hexutil.Bytes))
-		if err != nil {
-			return
-		}
-
-		err = method.Outputs.Copy(results[i], returnValue)
+		err = UnpackResult(invokeAB, invoke.Name, *batchElement.Result.(*hexutil.Bytes), results[i])
 		if err != nil {
 			return
 		}
@@ -229,14 +252,7 @@ func Do(ctx context.Context, client *ethclient.Client, ab *abi.ABI, invokes []In
 			invokeAB = ab
 		}
 
-		method := invokeAB.Methods[invoke.Name]
-		var returnValue []interface{}
-		returnValue, err = method.Outputs.Unpack(returnData)
-		if err != nil {
-			return
-		}
-
-		err = method.Outputs.Copy(results[i], returnValue)
+		err = UnpackResult(invokeAB, invoke.Name, returnData, results[i])
 		if err != nil {
 			return
 		}
